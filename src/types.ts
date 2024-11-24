@@ -6,6 +6,9 @@ export interface CliOptions {
   baseUrl?: string | true;
   codes?: string;
   static?: boolean;
+  relatedModelPath: string;
+  handlerName?: string;
+  camel?: boolean;
 }
 
 export type ConfigOptions = CliOptions & {

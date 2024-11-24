@@ -4,6 +4,7 @@ import merge from 'lodash/merge';
 import camelCase from 'lodash/camelCase';
 import { faker } from '@faker-js/faker';
 import { ConfigOptions } from './types';
+import { kebabCase, upperFirst } from 'lodash';
 
 const MAX_STRING_LENGTH = 42;
 
@@ -17,6 +18,7 @@ export interface Operation {
   verb: string;
   path: string;
   response: ResponseMap[];
+  requestBody?: OpenAPIV3.ReferenceObject | OpenAPIV3.RequestBodyObject;
 }
 
 export type OperationCollection = Operation[];
@@ -26,6 +28,48 @@ export function getResIdentifierName(res: ResponseMap) {
     return '';
   }
   return camelCase(`get ${res.id}${res.code}Response`);
+}
+
+function adjustConsecutiveUppercase(str: string) {
+  // use regular expression to find consecutive uppercase letters
+  return str.replace(/[A-Z]{2,}/g, match => {
+    // first letter uppercase, the rest lowercase
+    return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+  });
+}
+
+export function getRequestType(requestBody: OpenAPIV3.RequestBodyObject, isCamelCase: boolean = false) {
+  const type = (requestBody?.content['application/json'] as any).schema['$ref'].split('/').pop();
+  return isCamelCase ? upperFirst(camelCase(type)) : type;
+}
+
+export function getResType(res: ResponseMap, isCamelCase: boolean = false) {
+  const refPath = res.responses?.['application/json'] as any;
+  const type = refPath['x-component-ref-path'].split('/').pop();
+  return isCamelCase ? upperFirst(camelCase(type)) : type;
+}
+
+export function getResTypeFileName(res: ResponseMap, isCamelCase: boolean = false) {
+  // case 1: getRESKeyResponse => get-res-key-response
+  // case 2: getRESKeyResponse => get-reskey-response (typescript-axios)
+  const resType = getResType(res, isCamelCase);
+  return kebabCase(isCamelCase ? camelCase(resType) : adjustConsecutiveUppercase(resType));
+}
+
+export function getRequestTypeFileName(requestBody: OpenAPIV3.RequestBodyObject, isCamelCase: boolean = false) {
+  // case 1: getRESKeyRequest => get-res-key-request
+  // case 2: getRESKeyRequest => get-reskey-request (typescript-axios)
+  const reqType = getRequestType(requestBody, isCamelCase);
+  return kebabCase(isCamelCase ? camelCase(reqType) : adjustConsecutiveUppercase(reqType));
+}
+
+export function getOverrideHandlerName(res: ResponseMap, isCamelCase: boolean = false) {
+  if (!res.id) {
+    return '';
+  }
+
+  const id = isCamelCase ? camelCase(res.id) : res.id;
+  return `${id}Handler`;
 }
 
 export function transformToGenerateResultFunctions(
@@ -80,18 +124,96 @@ export function transformToGenerateResultFunctions(
     .join('\n');
 }
 
-export function transformToHandlerCode(operationCollection: OperationCollection): string {
+export function getOverrideHandlerFolderName(handlersFileName: string) {
+  const fileNameWithoutExtension = handlersFileName.replace(/\.[^/.]+$/, '');
+  return `override${upperFirst(fileNameWithoutExtension)}`;
+}
+
+export function removeExtension(filenameWithExtension: string) {
+  return filenameWithExtension.replace(/\.[^/.]+$/, '');
+}
+
+export function transformToImportOverrideHandlerTypeCode(
+  operationCollection: OperationCollection,
+  handlersFileName: string,
+  isCamelCase: boolean = false,
+): string {
   return operationCollection
     .map(op => {
-      return `http.${op.verb}(\`\${baseURL}${op.path}\`, async () => {
-        const resultArray = [${op.response.map(response => {
-          const identifier = getResIdentifierName(response);
-          return parseInt(response?.code!) === 204
-            ? `[undefined, { status: ${parseInt(response?.code!)} }]`
-            : `[${identifier ? `await ${identifier}()` : 'undefined'}, { status: ${parseInt(response?.code!)} }]`;
-        })}];
+      return `import ${getOverrideHandlerName(op.response[0], isCamelCase)} from './${getOverrideHandlerFolderName(handlersFileName)}/${getOverrideHandlerName(op.response[0], isCamelCase)}';\n`;
+    })
+    .join(' ')
+    .trimEnd();
+}
 
-          return HttpResponse.json(...resultArray[next() % resultArray.length])
+export function transformToImportReqTypeCode(
+  operationCollection: OperationCollection,
+  modelLocation: string,
+  isCamelCase: boolean = false,
+): string {
+  const isSingleFile = modelLocation[modelLocation.length - 1] !== '/';
+
+  if (isSingleFile) {
+    const types = operationCollection
+      .map(op => {
+        return `${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)},`;
+      })
+      .join(' ')
+      .trimEnd();
+    return `import {${types}} from '${modelLocation}';\n`;
+  } else {
+    return operationCollection
+      .map(op => {
+        return `import {${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)}} from '${modelLocation}${getRequestTypeFileName(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)}';\n`;
+      })
+      .join(' ')
+      .trimEnd();
+  }
+}
+
+export function transformToImportResTypeCode(
+  operationCollection: OperationCollection,
+  modelLocation: string,
+  isCamelCase: boolean = false,
+): string {
+  const isSingleFile = modelLocation[modelLocation.length - 1] !== '/';
+  if (isSingleFile) {
+    const types = operationCollection
+      .map(op => {
+        return `${getResType(op.response[0], isCamelCase)},`;
+      })
+      .join(' ')
+      .trimEnd();
+    return `import {${types}} from '${modelLocation}';\n`;
+  } else {
+    return operationCollection
+      .map(op => {
+        return `import {${getResType(op.response[0], isCamelCase)}} from '${modelLocation}${getResTypeFileName(op.response[0], isCamelCase)}';\n`;
+      })
+      .join(' ')
+      .trimEnd();
+  }
+}
+
+export function transformToHandlerCode(operationCollection: OperationCollection, isCamelCase: boolean = false): string {
+  return operationCollection
+    .map(op => {
+      return `http.${op.verb}<never,${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)}>(\`\${baseURL}${op.path}\`, async ({request}) => {
+        const req = await request.json();
+
+        // modify ${getOverrideHandlerName(op.response[0], isCamelCase)} function to override the response 
+        const response = await ${getOverrideHandlerName(op.response[0], isCamelCase)}(req);
+        if (response) {
+          return response;
+        }
+
+        const res = ${op.response
+          .filter((_, index) => index === 0)
+          .map(response => {
+            const identifier = getResIdentifierName(response);
+            return `${identifier ? `await ${identifier}()` : 'undefined'}`;
+          })}; 
+          return HttpResponse.json<${getResType(op.response[0], isCamelCase)}>(res)
         }),\n`;
     })
     .join('  ')

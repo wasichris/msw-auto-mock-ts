@@ -1,10 +1,10 @@
 {
-  "name": "msw-auto-mock",
-  "version": "0.25.0",
-  "description": "Generate random mock data from OpenAPI descriptions for msw.",
+  "name": "msw-auto-mock-ts",
+  "version": "0.1.0",
+  "description": "Generate random typescript mock data from OpenAPI descriptions for msw.",
   "main": "dist/cli.js",
   "bin": {
-    "msw-auto-mock": "./bin/cli.js"
+    "msw-auto-mock-ts": "./bin/cli.js"
   },
   "scripts": {
     "build": "tsup",
@@ -12,7 +12,7 @@
     "test": "vitest run",
     "release": "changeset publish"
   },
-  "author": "zoubingwu<zoubingwu@gmail.com>",
+  "author": "wasichris<wasichris@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/anthropic": "0.0.27",
@@ -44,12 +44,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zoubingwu/msw-auto-mock.git"
+    "url": "git+https://github.com/wasichris/msw-auto-mock-ts.git"
   },
   "bugs": {
-    "url": "https://github.com/zoubingwu/msw-auto-mock/issues"
+    "url": "https://github.com/wasichris/msw-auto-mock-ts/issues"
   },
-  "homepage": "https://github.com/zoubingwu/msw-auto-mock",
+  "homepage": "https://github.com/wasichris/msw-auto-mock-ts",
   "files": [
     "dist"
   ],
@@ -57,7 +57,8 @@
     "msw",
     "mock",
     "service-worker",
-    "openapi"
+    "openapi",
+    "typescript"
   ],
   "publishConfig": {
     "access": "public"

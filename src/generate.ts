@@ -8,8 +8,14 @@ import { cosmiconfig } from 'cosmiconfig';
 
 import { getV3Doc } from './swagger';
 import { prettify, toExpressLikePath } from './utils';
-import { Operation } from './transform';
-import { browserIntegration, mockTemplate, nodeIntegration, reactNativeIntegration } from './template';
+import { getOverrideHandlerName, getOverrideHandlerFolderName, Operation } from './transform';
+import {
+  browserIntegration,
+  mockTemplate,
+  nodeIntegration,
+  overrideHandlerTemplate,
+  reactNativeIntegration,
+} from './template';
 import { CliOptions, ConfigOptions } from './types';
 import { name as moduleName } from '../package.json';
 
@@ -23,9 +29,14 @@ export function generateOperationCollection(apiDoc: OpenAPIV3.Document, options:
     .map(definition => toOperation(definition, apiGen));
 }
 
+export const defaultHandlerName = 'handlers.ts';
+
 export async function generate(spec: string, inlineOptions: CliOptions) {
   const explorer = cosmiconfig(moduleName);
-  const finalOptions: ConfigOptions = { ...inlineOptions };
+  const finalOptions: ConfigOptions = {
+    ...inlineOptions,
+    handlerName: inlineOptions.handlerName ?? defaultHandlerName,
+  };
 
   try {
     const result = await explorer.search();
@@ -57,10 +68,41 @@ export async function generate(spec: string, inlineOptions: CliOptions) {
     fs.mkdirSync(targetFolder);
   } catch {}
 
-  fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'native.js'), reactNativeIntegration);
-  fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'node.js'), nodeIntegration);
-  fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'browser.js'), browserIntegration);
-  fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'handlers.js'), await prettify('handlers.js', code));
+  // skip it cause it's not necessary for me
+  // const handlerModuleName = removeExtension(finalOptions.handlerName!);
+  // fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'native.ts'), reactNativeIntegration(handlerModuleName));
+  // fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'node.ts'), nodeIntegration(handlerModuleName));
+  // fs.writeFileSync(path.resolve(process.cwd(), targetFolder, 'browser.ts'), browserIntegration(handlerModuleName));
+
+  // create msw api handler file
+  fs.writeFileSync(
+    path.resolve(process.cwd(), targetFolder, finalOptions.handlerName!),
+    await prettify(finalOptions.handlerName!, code),
+  );
+
+  // create override msw api handler folder & files
+  createOverrideHandlers(operationCollection, targetFolder, finalOptions);
+}
+
+async function createOverrideHandlers(operationCollection: Operation[], targetFolder: string, options: CliOptions) {
+  const folderPath = `${targetFolder}/${getOverrideHandlerFolderName(options.handlerName!)}`;
+  try {
+    fs.mkdirSync(folderPath);
+  } catch {}
+
+  operationCollection.forEach(async op => {
+    const fileName = `${getOverrideHandlerName(op.response[0], options.camel)}.ts`;
+    const code = overrideHandlerTemplate(op, options);
+
+    // not overwrite if file exists
+    const filePath = path.resolve(process.cwd(), folderPath, fileName);
+    if (fs.existsSync(filePath)) {
+      console.log(`File ${fileName} already exists, skip creating.`);
+      return;
+    }
+
+    fs.writeFileSync(filePath, await prettify(fileName, code));
+  });
 }
 
 function getServerUrl(apiDoc: OpenAPIV3.Document) {
@@ -84,6 +126,7 @@ type OperationDefinition = {
   path: string;
   verb: string;
   responses: OpenAPIV3.ResponsesObject;
+  requestBody?: OpenAPIV3.ReferenceObject | OpenAPIV3.RequestBodyObject;
   id: string;
 };
 
@@ -94,12 +137,17 @@ function getOperationDefinitions(v3Doc: OpenAPIV3.Document): OperationDefinition
       : Object.entries(pathItem)
           .filter((arg): arg is [string, OpenAPIV3.OperationObject] => operationKeys.includes(arg[0] as any))
           .map(([verb, operation]) => {
-            const id = camelCase(operation.operationId ?? verb + '/' + path);
+            // Keep the original id naming, because there are multiple uppercase letters connected together,
+            // there will be two camelCase conversion methods by openapi-generator (e.g. getAPIKey, getApiKey)
+            // especially convert it to filename, e.g. getAPIKey will be get-api-key.ts or get-apikey.ts (typescript-axios)
+            // causing the filename loaded to be different, so do not convert here,
+            const id = operation.operationId ?? camelCase(verb + '/' + path);
             return {
               path,
               verb,
               id,
               responses: operation.responses,
+              requestBody: operation.requestBody,
             };
           }),
   );
@@ -171,6 +219,7 @@ function toOperation(definition: OperationDefinition, apiGen: ApiGenerator): Ope
     verb,
     path: toExpressLikePath(path),
     response: responseMap,
+    requestBody: definition.requestBody,
   };
 }
 
