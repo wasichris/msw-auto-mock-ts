@@ -1,6 +1,6 @@
 {
   "name": "msw-auto-mock-ts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Generate random typescript typescript mock data from OpenAPI specification for msw.",
   "main": "dist/cli.js",
   "bin": {
