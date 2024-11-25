@@ -3,13 +3,16 @@
 ![npm](https://img.shields.io/npm/v/msw-auto-mock-ts)
 ![npm](https://img.shields.io/npm/dw/msw-auto-mock-ts)
 
-A cli tool to generate random typescript mock data from OpenAPI descriptions for [msw](https://github.com/mswjs/msw).
+A cli tool to generate random typescript mock data from OpenAPI specification for [msw](https://github.com/mswjs/msw).
 
 ## Why
 
-We already have all the type definitions from OpenAPI spec so hand-writing every response resolver is completely unnecessary.
+Since we already have all the type definitions from the OpenAPI specification, manually writing each response resolver is entirely unnecessary.
 
 
+## Getting Started
+
+We typically use tools like [openapi-generator-cli](https://openapi-generator.tech/docs/installation/) to create an HTTP client based on OpenAPI specification. These tools also generate all the necessary request and response models. Our goal is to reuse those models and automatically mock all API response data. Assuming we already have all the request and response models in our project, let’s see how it works.
 
 ## Usage
 
@@ -21,14 +24,64 @@ Install:
 npm add msw-auto-mock-ts @faker-js/faker -D
 ```
 
-Read from your OpenAPI descriptions and output generated code:
+
+Read from your OpenAPI specification, locate the models folder or file (relative to the output path), and then generate the output code:
+
 
 ```sh
 # can be http url or a file path on your machine, support both yaml and json.
 npx msw-auto-mock-ts http://your_openapi.json -o ./mock --related-model-path ../api/models -camel --handler-name openApiHandler.ts
 ```
 
-Integrate with msw, see [Mock Service Worker's doc](https://mswjs.io/docs/getting-started/integrate/browser) for more detail:
+
+Then we will get a handler file such as 'openApiHandler.ts' which contains all mocked APIs and responses like below:
+
+```typescript
+export const openApiHandler = [
+  http.post<never, ApiReqBaseWalletTransferReq>(
+    `${baseURL}/api/v1/trans/walletTransfer`,
+    async ({ request }) => {
+      const req = await request.json();
+
+      // modify walletTransferHandler function to override the response
+      const response = await walletTransferHandler(req);
+      if (response) {
+        return response;
+      }
+
+      const res = await getWalletTransfer200Response();
+      return HttpResponse.json<ApiResBaseWalletTransferRes>(res);
+    },
+  )
+  // others ...
+]
+```
+
+It also creates an override handler, such as 'walletTransferHandler' in the example, allowing users to add customized responses. The override handler file is located in a subfolder and will not be overwritten unless the file is deleted before regenerating mock data.
+
+
+```typescript
+const walletTransferHandler = async (request: ApiReqBaseWalletTransferReq) => {
+  // disable this handler
+  return null;
+
+  // await delay(200);
+
+  // return new HttpResponse(null, {
+  //   status: 500,
+  //   statusText: "Internal Server Error",
+  // });
+
+  // const response: ApiResBaseWalletTransferRes = { };
+  // return HttpResponse.json<ApiResBaseWalletTransferRes>(response);
+};
+
+export default walletTransferHandler;
+
+```
+
+
+The final step is to use 'openApiHandler.ts' to integrate with msw, see [Mock Service Worker's doc](https://mswjs.io/docs/getting-started/integrate/browser) for more detail.
 
 ## Options
 

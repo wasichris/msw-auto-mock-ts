@@ -77,7 +77,7 @@ const ${getOverrideHandlerName(op.response[0], options.camel)} = async (
   request: ${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, options.camel)}
 ) => {
 
-  // 不使用時，請回傳 null
+  // disable this handler
   return null; 
 
   // await delay(200);
