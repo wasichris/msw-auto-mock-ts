@@ -1,2 +1,0 @@
-# msw-auto-mock-ts
-

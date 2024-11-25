@@ -15,8 +15,14 @@ cli
     `Path to request / response model folder or file (export all models) related to handler file location. e.g. ../api/models`,
   )
   .option('-m, --max-array-length <number>', `Max array length, default to 20.`)
-  .option('-t, --includes <keywords>', `Include the request path with given string, can be seperated with comma.`)
-  .option('-e, --excludes <keywords>', `Exclude the request path with given string, can be seperated with comma.`)
+  .option(
+    '-t, --includes <keywords>',
+    `Include the request path with given string, can be separated with comma. e.g. keyword1,*keyword2, *keyword3*`,
+  )
+  .option(
+    '-e, --excludes <keywords>',
+    `Exclude the request path with given string, can be separated with comma. e.g. keyword1,*keyword2, *keyword3*`,
+  )
   .option('--base-url [baseUrl]', `Use the one you specified or server url in OpenAPI description as base url.`)
   .example(
     'msw-auto-mock-ts ./mock/openapi.json -o ./mock --handler-name openapiHandler.ts --camel --related-model-path ../axios-client-openapi/api',

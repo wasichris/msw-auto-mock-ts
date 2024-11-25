@@ -90,7 +90,7 @@ The final step is to use 'openApiHandler.ts' to integrate with msw, see [Mock Se
 - `--related-model-path <directory>`: Path to request / response model folder or file (export all models) related to handler file location. e.g. ../api/models
 - `--camel`: Transform request/response type to camelCase. e.g. myVISACard -> myVisaCard
 - `-m, --max-array-length <number>`: specify max array length in response, default value is `20`, it'll cost some time if you want to generate a huge chunk of random data.
-- `-t, --includes <keywords>`: specify keywords to match if you want to generate mock data only for certain requests, multiple keywords can be seperated with comma.
-- `-e, --excludes <keywords>`: specify keywords to exclude, multiple keywords can be seperated with comma.
+- `-t, --includes <keywords>`: specify keywords to match if you want to generate mock data only for certain requests, multiple keywords can be separated with comma. e.g. -t keyword1,\*keyword2,\*keyword\*
+- `-e, --excludes <keywords>`: specify keywords to exclude, multiple keywords can be separated with comma. e.g. -e keyword1,\*keyword2,\*keyword\*
 - `--base-url`: output code with specified base url or fallback to server host specified in OpenAPI.
 - `-h, --help`: show help info.

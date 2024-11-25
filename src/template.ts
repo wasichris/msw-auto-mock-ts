@@ -96,7 +96,7 @@ const ${overrideHandlerName} = async (
   //   statusText: "Internal Server Error",
   // });
 
-  // const response${hasValueToShow(resType, `:${resType}`)} = { };
+  // const response${hasValueToShow(resType, `: ${resType}`)} = { };
   // return HttpResponse.json${hasValueToShow(resType, `<${resType}>`)}(response);
 };
 

@@ -153,16 +153,26 @@ function getOperationDefinitions(v3Doc: OpenAPIV3.Document): OperationDefinition
   );
 }
 
+function matchesWithWildcard(input: string, target: string): boolean {
+  const regexPattern = '^' + input.replace(/\*/g, '.*') + '$';
+  const regex = new RegExp(regexPattern);
+  return regex.test(target);
+}
+
 function operationFilter(operation: OperationDefinition, options: CliOptions): boolean {
   const includes = options?.includes?.split(',') ?? null;
   const excludes = options?.excludes?.split(',') ?? null;
 
-  if (includes && !includes.includes(operation.path)) {
+  const isNotInclude = includes && !includes?.some(exclude => matchesWithWildcard(exclude, operation.path));
+  if (isNotInclude) {
     return false;
   }
-  if (excludes?.includes(operation.path)) {
+
+  const isExclude = excludes?.some(exclude => matchesWithWildcard(exclude, operation.path));
+  if (isExclude) {
     return false;
   }
+
   return true;
 }
 
