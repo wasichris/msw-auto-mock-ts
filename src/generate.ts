@@ -91,7 +91,7 @@ async function createOverrideHandlers(operationCollection: Operation[], targetFo
   } catch {}
 
   operationCollection.forEach(async op => {
-    const fileName = `${getOverrideHandlerName(op.response[0], options.camel)}.ts`;
+    const fileName = `${getOverrideHandlerName(op.id, options.camel)}.ts`;
     const code = overrideHandlerTemplate(op, options);
 
     // not overwrite if file exists
@@ -216,6 +216,7 @@ function toOperation(definition: OperationDefinition, apiGen: ApiGenerator): Ope
   });
 
   return {
+    id,
     verb,
     path: toExpressLikePath(path),
     response: responseMap,

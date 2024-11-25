@@ -15,6 +15,7 @@ export interface ResponseMap {
 }
 
 export interface Operation {
+  id: string;
   verb: string;
   path: string;
   response: ResponseMap[];
@@ -39,13 +40,23 @@ function adjustConsecutiveUppercase(str: string) {
 }
 
 export function getRequestType(requestBody: OpenAPIV3.RequestBodyObject, isCamelCase: boolean = false) {
-  const type = (requestBody?.content['application/json'] as any).schema['$ref'].split('/').pop();
+  const appJson = requestBody?.content['application/json'] as any;
+
+  if (appJson === undefined) {
+    return '';
+  }
+  const type = appJson.schema['$ref'].split('/').pop();
   return isCamelCase ? upperFirst(camelCase(type)) : type;
 }
 
 export function getResType(res: ResponseMap, isCamelCase: boolean = false) {
-  const refPath = res.responses?.['application/json'] as any;
-  const type = refPath['x-component-ref-path'].split('/').pop();
+  const appJson = res.responses?.['application/json'] as any;
+
+  if (appJson === undefined) {
+    return '';
+  }
+
+  const type = appJson['x-component-ref-path'].split('/').pop();
   return isCamelCase ? upperFirst(camelCase(type)) : type;
 }
 
@@ -63,13 +74,9 @@ export function getRequestTypeFileName(requestBody: OpenAPIV3.RequestBodyObject,
   return kebabCase(isCamelCase ? camelCase(reqType) : adjustConsecutiveUppercase(reqType));
 }
 
-export function getOverrideHandlerName(res: ResponseMap, isCamelCase: boolean = false) {
-  if (!res.id) {
-    return '';
-  }
-
-  const id = isCamelCase ? camelCase(res.id) : res.id;
-  return `${id}Handler`;
+export function getOverrideHandlerName(id: string, isCamelCase: boolean = false) {
+  const apiName = isCamelCase ? camelCase(id) : id;
+  return `${apiName}Handler`;
 }
 
 export function transformToGenerateResultFunctions(
@@ -140,7 +147,7 @@ export function transformToImportOverrideHandlerTypeCode(
 ): string {
   return operationCollection
     .map(op => {
-      return `import ${getOverrideHandlerName(op.response[0], isCamelCase)} from './${getOverrideHandlerFolderName(handlersFileName)}/${getOverrideHandlerName(op.response[0], isCamelCase)}';\n`;
+      return `import ${getOverrideHandlerName(op.id, isCamelCase)} from './${getOverrideHandlerFolderName(handlersFileName)}/${getOverrideHandlerName(op.id, isCamelCase)}';\n`;
     })
     .join(' ')
     .trimEnd();
@@ -154,12 +161,24 @@ export function transformToImportReqTypeCode(
   const isSingleFile = modelLocation[modelLocation.length - 1] !== '/';
 
   if (isSingleFile) {
-    const types = operationCollection
-      .map(op => {
-        return `${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)},`;
-      })
-      .join(' ')
+    const importTypes: string[] = [];
+    operationCollection.map(op => {
+      const type = getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase);
+      if (type) {
+        importTypes.push(type);
+      }
+    });
+
+    if (importTypes.length === 0) {
+      return '';
+    }
+
+    const types = importTypes
+      .filter((value, index, self) => self.indexOf(value) === index)
+      .join(',\n ')
+      .trimStart()
       .trimEnd();
+
     return `import {${types}} from '${modelLocation}';\n`;
   } else {
     return operationCollection
@@ -178,12 +197,24 @@ export function transformToImportResTypeCode(
 ): string {
   const isSingleFile = modelLocation[modelLocation.length - 1] !== '/';
   if (isSingleFile) {
-    const types = operationCollection
-      .map(op => {
-        return `${getResType(op.response[0], isCamelCase)},`;
-      })
-      .join(' ')
+    const importTypes: string[] = [];
+    operationCollection.map(op => {
+      const type = getResType(op.response[0], isCamelCase);
+      if (type) {
+        importTypes.push(type);
+      }
+    });
+
+    if (importTypes.length === 0) {
+      return '';
+    }
+
+    const types = importTypes
+      .filter((value, index, self) => self.indexOf(value) === index)
+      .join(',\n ')
+      .trimStart()
       .trimEnd();
+
     return `import {${types}} from '${modelLocation}';\n`;
   } else {
     return operationCollection
@@ -195,14 +226,22 @@ export function transformToImportResTypeCode(
   }
 }
 
+export function hasValueToShow(value: string, valueToShow: string) {
+  return value && value.trim() !== '' ? valueToShow : '';
+}
+
 export function transformToHandlerCode(operationCollection: OperationCollection, isCamelCase: boolean = false): string {
   return operationCollection
     .map(op => {
-      return `http.${op.verb}<never,${getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase)}>(\`\${baseURL}${op.path}\`, async ({request}) => {
-        const req = await request.json();
+      const reqType = getRequestType(op.requestBody as OpenAPIV3.RequestBodyObject, isCamelCase);
+      const resType = getResType(op.response[0], isCamelCase);
+      const overrideHandlerName = getOverrideHandlerName(op.id, isCamelCase);
 
-        // modify ${getOverrideHandlerName(op.response[0], isCamelCase)} function to override the response 
-        const response = await ${getOverrideHandlerName(op.response[0], isCamelCase)}(req);
+      return `http.${op.verb}<never${hasValueToShow(reqType, `,${reqType}`)}>(\`\${baseURL}${op.path}\`, async (${hasValueToShow(reqType, '{request}')}) => {
+        ${hasValueToShow(reqType, 'const req = await request.json();')}
+
+        // modify ${overrideHandlerName} function to override the response 
+        const response = await ${overrideHandlerName}(${hasValueToShow(reqType, 'req')});
         if (response) {
           return response;
         }
@@ -213,7 +252,7 @@ export function transformToHandlerCode(operationCollection: OperationCollection,
             const identifier = getResIdentifierName(response);
             return `${identifier ? `await ${identifier}()` : 'undefined'}`;
           })}; 
-          return HttpResponse.json<${getResType(op.response[0], isCamelCase)}>(res)
+          return HttpResponse.json${hasValueToShow(resType, `<${resType}>`)}(res);
         }),\n`;
     })
     .join('  ')
